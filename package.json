@@ -1,0 +1,9 @@
+{
+  "name": "brilha-memoria",
+  "version": "0.3.18",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}
