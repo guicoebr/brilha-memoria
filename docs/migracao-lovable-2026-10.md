@@ -78,3 +78,35 @@ Intervalos mantidos: `[0,1,3,7,14,30,60,120,240]`; acerto avança um estágio; p
 7. Rodar testes fim a fim de login, PIN, ativação, sessões, revisão, demonstração, PWA, navegação e backend no novo domínio; somente então avaliar o merge.
 
 **Nenhuma dessas divergências prova perda efetiva de dados; nenhum merge ou deploy foi realizado nesta auditoria.**
+
+
+## Verificação após as correções da reconstrução (18/10/2026, 14h47–15h)
+
+**Origem do código verificado:** `guicoebr/brilha-memoria-3a9c8c9a` commit `75974d50bc23f1cc72b1e0772b6b15aed7e78bfa` (este commit já estava no GitHub). O trabalho segue separado do original.
+
+### Correções confirmadas na leitura do código
+
+- `src/routes/equipe.tsx` usa bloqueio persistente para o retorno à UI adulta, que apresenta `StaffUnlock`; o seletor visual para simular administração foi removido.
+- `src/components/brilha/StaffUnlock.tsx` usa um cliente Supabase temporário sem persistir sessão para autenticar novamente por senha e compara o ID do usuário resultante com o da sessão adulta. **Contas Google/OAuth continuam sem caminho de desbloqueio**. O bloqueio local impede acesso casual à interface, mas não constitui isolamento criptográfico da sessão da equipe: a sessão autenticada permanece no navegador. Avaliar isolamento forte do aparelho antes de uso irrestrito por crianças.
+- `src/lib/brilha/safety.ts`: `permissionPayload` converte as linhas para JSON OBJECT com booleanos normalizados, incluindo `false`; `AdminPanels.tsx` envia esse objeto ao `set_role_permissions`.
+- O editor `AdminPanels.tsx` lê `source_url` e `rights_note` junto das mídias e os envia de volta. O SQL real de `update_content_bundle` aceita edição de um conteúdo já publicado por `content.edit` sem exigir nova permissão de publicação, desde que o status continue publicado.
+- `equipe.tsx` aguarda o UUID de sessão, usa trava de submissão para evitar duplo envio; `casa.tsx` retém o token e permite tentar novamente quando `device_finish_student_session` falha.
+- `safety.test.js` define nove testes unitários; o Lovable relata aprovação, além de testes de navegador com respostas simuladas. **Esses testes não exercitaram escrita real no Supabase.**
+
+### Contratos externos confirmados por consulta SQL SOMENTE LEITURA
+
+- O projeto Supabase externo `nvmaiytcawbsqlejbdai` estava `ACTIVE_HEALTHY` nesta verificação.
+- `set_role_permissions(p_role app_role, p_permissions jsonb)` exige `jsonb_typeof(p_permissions) = 'object'`; faz upsert para cada chave configurável presente, inclusive `false`; requer administrador.
+- `clear_student_access_pin(p_student_id uuid)`: exige perfil, `session.run` e `can_access_student`.
+- `get_classroom_devices(p_class_id uuid)`: retorna `device_id`, `bound_student_id`, `status`, entre outros; exige `session.run` e `can_access_class`.
+- `revoke_classroom_device(p_device_id uuid)`: exige perfil, `session.run` e `can_access_class`; marca dispositivo como revogado e revoga sessões de estudantes abertas para esse aparelho.
+- `can_access_class` exige `class.view` e autorização da turma; `can_access_student` exige `student.view` e matrícula vigente em turma autorizada.
+- `update_content_bundle`: exige `content.edit`, requer `content.publish` para transição de rascunho a publicado e atualiza metadados existentes. A UI agora envia fontes/direitos não nulos quando eles existem.
+
+### Portões ainda abertos
+
+1. Não há reautenticação segura para retorno de usuários que entraram por Google: fluxo bloqueado deliberadamente, pendente de projeto e teste.
+2. Sem testes reais com perfis isolados, PIN de teste, escrita/revogação, e sem revisão integral de políticas RLS. Consultar contratos de funções não substitui esses testes.
+3. Nenhuma execução manual de `SPA_BUILD=1` confirmou o build após as últimas mudanças; o Lovable reportou typecheck e build automático, mas não o build estático independente.
+4. O workflow `.github/workflows/deploy-hostgator.yml` está configurado para acionar com `push` em `main`; confirmar ausência de credenciais FTP de produção e bloquear deploy automático até aprovação final da migração.
+5. Nenhum merge no original, alteração de DNS, ou publicação no HostGator está autorizado.
